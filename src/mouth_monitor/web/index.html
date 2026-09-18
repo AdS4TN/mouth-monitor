@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>嘴唇闭合提醒器</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: Inter, "Segoe UI", "Microsoft YaHei", sans-serif;
+      color: #1f2937;
+      background: #f8f9fa;
+      --border: #d8dee4;
+      --muted: #667085;
+      --primary: #0066cc;
+      --danger: #c62828;
+      --surface: #ffffff;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: #f8f9fa; transition: background-color 140ms ease; }
+    body.alerting { background: #fff1f1; }
+    header { height: 64px; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; background: var(--surface); border-bottom: 1px solid var(--border); }
+    h1 { margin: 0; font-size: 20px; font-weight: 650; }
+    .privacy { color: var(--muted); font-size: 13px; }
+    main { max-width: 1280px; margin: 0 auto; padding: 24px; }
+    .notice { margin-bottom: 16px; padding: 12px 14px; border: 1px solid #f0c36d; border-radius: 8px; background: #fffaf0; font-size: 14px; }
+    .layout { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(320px, 0.85fr); gap: 16px; }
+    .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+    .video-panel { overflow: hidden; min-height: 420px; background: #15191f; display: grid; place-items: center; }
+    .video-panel img { display: block; width: 100%; height: auto; min-height: 420px; object-fit: contain; }
+    .sidebar { padding: 18px; }
+    .status { padding-bottom: 16px; margin-bottom: 16px; border-bottom: 1px solid var(--border); }
+    .status strong { display: block; font-size: 24px; margin-bottom: 4px; }
+    .alerting .status strong { color: var(--danger); }
+    .status small, .hint { color: var(--muted); }
+    dl { display: grid; grid-template-columns: 1fr auto; gap: 9px 12px; margin: 0; font-size: 14px; }
+    dt { color: var(--muted); }
+    dd { margin: 0; font-variant-numeric: tabular-nums; }
+    .controls { margin-top: 16px; padding: 18px; }
+    .row { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; margin-bottom: 14px; }
+    .row:last-child { margin-bottom: 0; }
+    label { display: grid; gap: 6px; font-size: 13px; color: #344054; }
+    input, select, button { font: inherit; }
+    input, select { height: 38px; padding: 0 10px; border: 1px solid #b8c0cc; border-radius: 8px; background: #fff; color: #1f2937; }
+    input[type="number"] { width: 120px; }
+    input:focus, select:focus { outline: 2px solid #b8d8f8; border-color: var(--primary); }
+    button { height: 38px; padding: 0 14px; border: 1px solid #b8c0cc; border-radius: 8px; background: #fff; color: #1f2937; cursor: pointer; }
+    button:hover { background: #f3f4f6; }
+    button.primary { color: #fff; background: var(--primary); border-color: var(--primary); }
+    button.danger { color: var(--danger); border-color: #e2a5a5; }
+    .message { min-height: 20px; margin-top: 12px; color: var(--muted); font-size: 13px; }
+    .message.error { color: var(--danger); }
+    .checkbox { display: flex; align-items: center; gap: 8px; height: 38px; }
+    .checkbox input { width: auto; height: auto; }
+    @media (max-width: 900px) {
+      header { height: auto; align-items: flex-start; gap: 8px; padding: 16px; flex-direction: column; }
+      main { padding: 16px; }
+      .layout { grid-template-columns: 1fr; }
+      .video-panel, .video-panel img { min-height: 260px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>嘴唇闭合提醒器</h1>
+    <div class="privacy">所有画面仅在本机处理，不上传、不保存</div>
+  </header>
+  <main>
+    <div class="notice">本工具只判断嘴唇是否持续张开，不能识别真实呼吸气流，也不能替代医疗诊断。</div>
+    <div class="layout">
+      <section class="panel video-panel">
+        <img id="video" alt="摄像头监控画面">
+      </section>
+      <aside class="panel sidebar">
+        <div class="status">
+          <strong id="stateLabel">已停止</strong>
+          <small id="calibrationMessage">请先启动摄像头并完成校准</small>
+        </div>
+        <dl>
+          <dt>当前比例</dt><dd id="ratio">—</dd>
+          <dt>平滑比例</dt><dd id="smoothedRatio">—</dd>
+          <dt>进入阈值</dt><dd id="enterThreshold">—</dd>
+          <dt>退出阈值</dt><dd id="exitThreshold">—</dd>
+          <dt>张嘴持续</dt><dd id="openDuration">0.0 秒</dd>
+          <dt>提醒冷却</dt><dd id="cooldown">0.0 秒</dd>
+          <dt>嘴部波动</dt><dd id="variance">—</dd>
+          <dt>处理速度</dt><dd id="fps">—</dd>
+          <dt>推理耗时</dt><dd id="inference">—</dd>
+        </dl>
+      </aside>
+    </div>
+
+    <section class="panel controls">
+      <div class="row">
+        <label>摄像头
+          <select id="camera"><option value="0">摄像头 0</option></select>
+        </label>
+        <button id="scan">扫描摄像头</button>
+        <button id="start" class="primary">开始监控</button>
+        <button id="pause">暂停</button>
+        <button id="stop">停止</button>
+      </div>
+      <div class="row">
+        <button data-calibration="closed">采集闭嘴基线</button>
+        <button data-calibration="open">采集轻微张嘴</button>
+        <button id="resetCalibration" class="danger">清除校准</button>
+        <button id="testReminder">测试提醒音</button>
+      </div>
+      <div class="row">
+        <label>持续时间（秒）<input id="sustainedSeconds" type="number" min="1" max="60" step="0.5" value="8"></label>
+        <label>冷却时间（秒）<input id="cooldownSeconds" type="number" min="0" max="300" step="1" value="30"></label>
+        <label>说话过滤阈值<input id="movementSensitivity" type="number" min="0.002" max="0.05" step="0.001" value="0.012"></label>
+        <label class="checkbox"><input id="soundEnabled" type="checkbox" checked>启用声音</label>
+        <button id="saveSettings">保存设置</button>
+      </div>
+      <div id="message" class="message"></div>
+    </section>
+  </main>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const number = (value, digits = 3) => value == null ? "—" : Number(value).toFixed(digits);
+    let settingsLoaded = false;
+
+    async function request(path, options = {}) {
+      const response = await fetch(path, {
+        ...options,
+        headers: { "Content-Type": "application/json", ...(options.headers || {}) }
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.detail || `请求失败：${response.status}`);
+      }
+      return response.json();
+    }
+
+    function showMessage(text, error = false) {
+      $("message").textContent = text;
+      $("message").classList.toggle("error", error);
+    }
+
+    function render(data) {
+      document.body.classList.toggle("alerting", Boolean(data.alerting));
+      $("stateLabel").textContent = data.state_label;
+      $("calibrationMessage").textContent = data.error || data.calibration_message;
+      $("ratio").textContent = number(data.ratio);
+      $("smoothedRatio").textContent = number(data.smoothed_ratio);
+      $("enterThreshold").textContent = number(data.enter_threshold);
+      $("exitThreshold").textContent = number(data.exit_threshold);
+      $("openDuration").textContent = `${number(data.open_duration, 1)} 秒`;
+      $("cooldown").textContent = `${number(data.cooldown_remaining, 1)} 秒`;
+      $("variance").textContent = number(data.movement_variance, 4);
+      $("fps").textContent = data.processing_fps ? `${number(data.processing_fps, 1)} FPS` : "—";
+      $("inference").textContent = data.inference_ms ? `${number(data.inference_ms, 1)} ms` : "—";
+      if (!settingsLoaded && data.settings) {
+        $("camera").value = String(data.settings.camera_index);
+        $("sustainedSeconds").value = data.settings.sustained_seconds;
+        $("cooldownSeconds").value = data.settings.cooldown_seconds;
+        $("movementSensitivity").value = data.settings.movement_sensitivity;
+        $("soundEnabled").checked = data.settings.sound_enabled;
+        settingsLoaded = true;
+      }
+    }
+
+    function post(path, body) {
+      return request(path, { method: "POST", body: body ? JSON.stringify(body) : undefined });
+    }
+
+    $("scan").onclick = async () => {
+      try {
+        showMessage("正在扫描摄像头……");
+        const data = await request("/api/cameras");
+        $("camera").innerHTML = data.cameras.map(camera => `<option value="${camera.index}">${camera.label}</option>`).join("");
+        showMessage(data.cameras.length ? `找到 ${data.cameras.length} 个摄像头` : "没有找到可用摄像头", !data.cameras.length);
+      } catch (error) { showMessage(error.message, true); }
+    };
+    $("start").onclick = async () => {
+      try {
+        await post("/api/start", { camera_index: Number($("camera").value) });
+        $("video").src = `/video?time=${Date.now()}`;
+        showMessage("监控正在启动");
+      } catch (error) { showMessage(error.message, true); }
+    };
+    $("pause").onclick = () => post("/api/pause").then(() => showMessage("已暂停并释放摄像头")).catch(error => showMessage(error.message, true));
+    $("stop").onclick = () => post("/api/stop").then(() => showMessage("已停止并释放摄像头")).catch(error => showMessage(error.message, true));
+    document.querySelectorAll("[data-calibration]").forEach(button => {
+      button.onclick = () => post(`/api/calibrate/${button.dataset.calibration}`).then(() => showMessage("校准采集中，请保持姿势约 3 秒")).catch(error => showMessage(error.message, true));
+    });
+    $("resetCalibration").onclick = () => post("/api/calibration/reset").then(() => showMessage("校准已清除")).catch(error => showMessage(error.message, true));
+    $("testReminder").onclick = () => post("/api/reminder/test").then(data => showMessage(data.played ? "已播放提醒音" : "声音已关闭或播放失败")).catch(error => showMessage(error.message, true));
+    $("saveSettings").onclick = async () => {
+      try {
+        await post("/api/settings", {
+          sustained_seconds: Number($("sustainedSeconds").value),
+          cooldown_seconds: Number($("cooldownSeconds").value),
+          movement_sensitivity: Number($("movementSensitivity").value),
+          sound_enabled: $("soundEnabled").checked
+        });
+        showMessage("设置已保存");
+      } catch (error) { showMessage(error.message, true); }
+    };
+
+    function connect() {
+      const socket = new WebSocket(`ws://${location.host}/ws`);
+      socket.onmessage = event => render(JSON.parse(event.data));
+      socket.onclose = () => setTimeout(connect, 1000);
+    }
+    request("/api/status").then(render).catch(error => showMessage(error.message, true));
+    connect();
+  </script>
+</body>
+</html>

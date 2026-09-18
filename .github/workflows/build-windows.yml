@@ -1,0 +1,32 @@
+name: Windows Build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: 安装 Python
+        run: uv python install 3.12
+
+      - name: 构建与测试
+        shell: pwsh
+        run: .\scripts\build.ps1
+
+      - name: 上传 Windows 发布包
+        uses: actions/upload-artifact@v4
+        with:
+          name: MouthMonitor-windows-x64
+          path: dist/MouthMonitor-windows-x64.zip
+          if-no-files-found: error
